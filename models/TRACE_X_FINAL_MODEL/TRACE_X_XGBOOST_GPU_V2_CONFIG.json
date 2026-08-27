@@ -1,0 +1,30 @@
+{
+  "model": "XGBoost V2",
+  "device": "cuda",
+  "gpu": "Tesla T4",
+  "features": 38,
+  "positive_weight": 2155.4752223634055,
+  "best_iteration": 1199,
+  "validation_auprc": 0.14352167165875468,
+  "validation_roc_auc": 0.9737514683947162,
+  "parameters": {
+    "objective": "binary:logistic",
+    "eval_metric": [
+      "aucpr",
+      "auc",
+      "logloss"
+    ],
+    "tree_method": "hist",
+    "device": "cuda",
+    "max_depth": 6,
+    "learning_rate": 0.045,
+    "min_child_weight": 10,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "reg_alpha": 0.25,
+    "reg_lambda": 10.0,
+    "max_bin": 256,
+    "seed": 2026,
+    "verbosity": 1
+  }
+}

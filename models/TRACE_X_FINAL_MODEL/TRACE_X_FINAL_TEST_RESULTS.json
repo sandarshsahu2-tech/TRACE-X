@@ -1,0 +1,16 @@
+{
+  "model": "XGBoost_GPU",
+  "dataset": "LI-Small_Trans",
+  "test_rows": 1174673,
+  "test_positive": 802,
+  "locked_threshold": 0.76,
+  "test_auprc": 0.2140051687325965,
+  "test_roc_auc": 0.9652932440071441,
+  "test_precision": 0.4397905759162304,
+  "test_recall": 0.20947630922693267,
+  "test_f1": 0.28378378378378377,
+  "true_negatives": 1173657,
+  "false_positives": 214,
+  "false_negatives": 634,
+  "true_positives": 168
+}

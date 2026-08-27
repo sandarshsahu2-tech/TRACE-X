@@ -1,0 +1,47 @@
+[
+  {
+    "file": "README.txt",
+    "size_mb": 0.001,
+    "sha256": "e10575889829c2382aab13f60240000c019eadf67e75b533562d42b1a9ac7033"
+  },
+  {
+    "file": "TRACE_X_FEATURE_IMPORTANCE.csv",
+    "size_mb": 0.001,
+    "sha256": "e5612b2578c63cdbe027761d988926e8926a9e424045e54120d24ead623daea7"
+  },
+  {
+    "file": "TRACE_X_FINAL_MODEL_AUDIT.json",
+    "size_mb": 0.001,
+    "sha256": "8d14f9ea8ab94a908b747413faae5704c7f2b35626604f7058db47aa3e332f97"
+  },
+  {
+    "file": "TRACE_X_FINAL_TEST_RESULTS.json",
+    "size_mb": 0.0,
+    "sha256": "49b225ee81c81fcc88cfe6dc251f693375cd43783728c6f3c5636b3d96feb9f4"
+  },
+  {
+    "file": "TRACE_X_MODEL_FEATURES.json",
+    "size_mb": 0.001,
+    "sha256": "69842e226f8432862fc6e603f28203045236d69241f42a853327bdf1b0358597"
+  },
+  {
+    "file": "TRACE_X_THRESHOLD_ANALYSIS.csv",
+    "size_mb": 0.001,
+    "sha256": "bbf828de9cff688f255dda9faec69755ff838a9de81b3604d7cc3fb1ee1f2e21"
+  },
+  {
+    "file": "TRACE_X_XGBOOST_GPU.json",
+    "size_mb": 11.609,
+    "sha256": "b60172e970cd20fb218993a2d93028df56918711f48f6b5bbb10d21a627aafff"
+  },
+  {
+    "file": "TRACE_X_XGBOOST_GPU_V2_CONFIG.json",
+    "size_mb": 0.001,
+    "sha256": "50f24f2a8fa5c645490a02ffe43ab62f4c77fd3a44b44b4afc91ab72b8e30577"
+  },
+  {
+    "file": "prediction_pipeline.py",
+    "size_mb": 0.003,
+    "sha256": "21e9b03c7cb97ee659cdf58267e4577465ba67cba5989d0663341bf060885ff9"
+  }
+]

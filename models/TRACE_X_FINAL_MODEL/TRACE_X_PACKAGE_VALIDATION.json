@@ -1,0 +1,17 @@
+{
+  "package": "TRACE_X_FINAL_MODEL",
+  "model": "V1",
+  "model_load": true,
+  "feature_count": 38,
+  "train_rows": 5091438,
+  "test_rows": 1174673,
+  "threshold": 0.76,
+  "auprc": 0.2140051687325965,
+  "roc_auc": 0.9652932440071441,
+  "precision": 0.4397905759162304,
+  "recall": 0.20947630922693267,
+  "f1": 0.28378378378378377,
+  "metrics_reproduced": true,
+  "test_used_for_training": false,
+  "test_used_for_threshold_selection": false
+}

@@ -1,0 +1,42 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Large/raw datasets
+DATA/
+*.csv
+*.parquet
+*.duckdb
+*.db
+
+# Jupyter / Colab
+.ipynb_checkpoints/
+NOTEBOOKS/.ipynb_checkpoints/
+
+# Frontend dependencies/build
+frontend/node_modules/
+frontend/dist/
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+!models/TRACE_X_FINAL_MODEL/frequency_lookup.parquet
+# Local backup files
+*_BACKUP.*
+
+NOTEBOOKS/

@@ -1,0 +1,12 @@
+{
+  "model": "TRACE-X V1",
+  "timestamp": "2022-09-09 00:00:00",
+  "risk_score": 7.728404938234235e-08,
+  "threshold": 0.76,
+  "decision": "\u2705 NORMAL",
+  "historical_features": "strictly past-only",
+  "same_timestamp_excluded": true,
+  "future_information_used": false,
+  "train_only_frequency_encoding": true,
+  "model_retrained": false
+}

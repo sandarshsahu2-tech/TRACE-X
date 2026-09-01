@@ -53,7 +53,7 @@ import "./App.css";
 
 const API_BASE = (
   import.meta.env.VITE_API_URL ||
-  "http://127.0.0.1:8001"
+  "https://chronicles-interpreted-commission-convergence.trycloudflare.com"
 ).replace(/\/$/, "");
 
 

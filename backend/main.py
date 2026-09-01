@@ -9,6 +9,7 @@ assistant only. It does NOT modify the TRACE-X decision.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,13 +24,14 @@ from backend.schemas import (
     PredictionResponse,
     TransactionRequest,
 )
-
 from backend.inference import trace_x_model
 
 
 # ============================================================
 # ENVIRONMENT
 # ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 load_dotenv(
     Path(__file__).resolve().parent / ".env"
@@ -40,13 +42,16 @@ load_dotenv(
 # PATHS
 # ============================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-ANALYTICS_DB = (
-    PROJECT_ROOT
-    / "models"
-    / "TRACE_X_FINAL_MODEL"
-    / "trace_x_data.duckdb"
+ANALYTICS_DB = Path(
+    os.getenv(
+        "TRACE_X_ANALYTICS_DB",
+        str(
+            PROJECT_ROOT
+            / "models"
+            / "TRACE_X_FINAL_MODEL"
+            / "trace_x_data.duckdb"
+        ),
+    )
 )
 
 
@@ -62,7 +67,7 @@ app = FastAPI(
         "dashboard analytics, investigation support and "
         "grounded GenAI assistance."
     ),
-    version="3.0.0",
+    version="3.1.0",
 )
 
 
@@ -70,24 +75,35 @@ app = FastAPI(
 # CORS
 # ============================================================
 
+_default_origins = [
+    "http://localhost:5179",
+    "http://127.0.0.1:5179",
+    "http://localhost:5178",
+    "http://127.0.0.1:5178",
+    "http://localhost:5177",
+    "http://127.0.0.1:5177",
+    "http://localhost:5176",
+    "http://127.0.0.1:5176",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+_env_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "TRACE_X_ALLOWED_ORIGINS",
+        "",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5179",
-        "http://127.0.0.1:5179",
-
-        "http://localhost:5178",
-        "http://127.0.0.1:5178",
-
-        "http://localhost:5177",
-        "http://127.0.0.1:5177",
-
-        "http://localhost:5176",
-        "http://127.0.0.1:5176",
-
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_env_origins + _default_origins,
+    allow_origin_regex=os.getenv(
+        "TRACE_X_ALLOWED_ORIGIN_REGEX",
+        r"https://.*\.trycloudflare\.com",
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,15 +111,14 @@ app.add_middleware(
 
 
 # ============================================================
-# DATABASE CONNECTION
+# DATABASE
 # ============================================================
 
 def get_analytics_connection():
     """
-    Open the TRACE-X analytics database.
+    Open the TRACE-X analytics database in read-only mode.
 
-    Each dashboard request receives its own short-lived
-    DuckDB connection.
+    Each request gets a short-lived DuckDB connection.
     """
 
     if not ANALYTICS_DB.exists():
@@ -113,57 +128,37 @@ def get_analytics_connection():
         )
 
     return duckdb.connect(
-        str(ANALYTICS_DB)
+        str(ANALYTICS_DB),
+        read_only=True,
     )
 
 
 # ============================================================
-# TRANSACTION CONVERTER
+# HELPERS
 # ============================================================
 
 def transaction_to_dict(
     request: TransactionRequest,
 ) -> dict[str, Any]:
-
     return {
         "Timestamp": request.timestamp,
-
-        "From_Bank": str(
-            request.from_bank
-        ),
-
-        "Sender_Account": str(
-            request.sender_account
-        ),
-
-        "To_Bank": str(
-            request.to_bank
-        ),
-
-        "Receiver_Account": str(
-            request.receiver_account
-        ),
-
-        "Amount_Received": float(
-            request.amount_received
-        ),
-
-        "Receiving_Currency": str(
-            request.receiving_currency
-        ),
-
-        "Amount_Paid": float(
-            request.amount_paid
-        ),
-
-        "Payment_Currency": str(
-            request.payment_currency
-        ),
-
-        "Payment_Format": str(
-            request.payment_format
-        ),
+        "From_Bank": str(request.from_bank),
+        "Sender_Account": str(request.sender_account),
+        "To_Bank": str(request.to_bank),
+        "Receiver_Account": str(request.receiver_account),
+        "Amount_Received": float(request.amount_received),
+        "Receiving_Currency": str(request.receiving_currency),
+        "Amount_Paid": float(request.amount_paid),
+        "Payment_Currency": str(request.payment_currency),
+        "Payment_Format": str(request.payment_format),
     }
+
+
+def http500(message: str, exc: Exception):
+    raise HTTPException(
+        status_code=500,
+        detail=f"{message}: {exc}",
+    )
 
 
 # ============================================================
@@ -172,19 +167,16 @@ def transaction_to_dict(
 
 @app.get("/")
 def root() -> dict[str, Any]:
-
     return {
         "service": "TRACE-X Investigation API",
         "status": "operational",
         "model_ready": True,
         "analytics_ready": ANALYTICS_DB.exists(),
         "genai_enabled": bool(
-            __import__("os").getenv(
-                "GEMINI_API_KEY"
-            )
+            os.getenv("GEMINI_API_KEY")
         ),
-        "version": "3.0.0",
-        "port": 8001,
+        "version": "3.1.0",
+        "port": int(os.getenv("PORT", "8001")),
     }
 
 
@@ -197,11 +189,19 @@ def root() -> dict[str, Any]:
     response_model=HealthResponse,
 )
 def health() -> HealthResponse:
-
     return HealthResponse(
         status="healthy",
         model_loaded=True,
     )
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, Any]:
+    return {
+        "status": "healthy",
+        "model_loaded": True,
+        "analytics_ready": ANALYTICS_DB.exists(),
+    }
 
 
 # ============================================================
@@ -210,20 +210,10 @@ def health() -> HealthResponse:
 
 @app.get("/api/v1/model")
 def model_status() -> dict[str, Any]:
-
     try:
-
         return trace_x_model.status()
-
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Unable to read model status: "
-                f"{exc}"
-            ),
-        )
+        http500("Unable to read model status", exc)
 
 
 # ============================================================
@@ -232,21 +222,19 @@ def model_status() -> dict[str, Any]:
 
 @app.get("/api/v1/system")
 def system_status() -> dict[str, Any]:
-
     try:
-
-        model_data = (
-            trace_x_model.status()
-        )
-
-        analytics_ready = (
-            ANALYTICS_DB.exists()
-        )
-
+        model_data = trace_x_model.status()
+        analytics_ready = ANALYTICS_DB.exists()
         genai_configured = bool(
-            __import__("os").getenv(
-                "GEMINI_API_KEY"
-            )
+            os.getenv("GEMINI_API_KEY")
+        )
+
+        historical_ready = (
+            model_data.get("historical_engine") == "ready"
+        )
+
+        feature_ready = (
+            model_data.get("feature_service") == "ready"
         )
 
         return {
@@ -255,40 +243,27 @@ def system_status() -> dict[str, Any]:
                 if analytics_ready
                 else "DEGRADED"
             ),
-
             "model": model_data,
-
             "engines": {
                 "ml": "READY",
-
                 "historical": (
                     "READY"
-                    if model_data.get(
-                        "historical_engine"
-                    ) == "ready"
+                    if historical_ready
                     else "ERROR"
                 ),
-
                 "feature_service": (
                     "READY"
-                    if model_data.get(
-                        "feature_service"
-                    ) == "ready"
+                    if feature_ready
                     else "ERROR"
                 ),
-
                 "analytics": (
                     "READY"
                     if analytics_ready
                     else "NOT_READY"
                 ),
-
                 "graph": "READY",
-
                 "rules": "READY",
-
                 "investigation": "READY",
-
                 "genai": (
                     "READY"
                     if genai_configured
@@ -298,12 +273,9 @@ def system_status() -> dict[str, Any]:
         }
 
     except Exception as exc:
-
         return {
             "status": "DEGRADED",
-
             "model": "ERROR",
-
             "engines": {
                 "ml": "ERROR",
                 "historical": "ERROR",
@@ -314,7 +286,6 @@ def system_status() -> dict[str, Any]:
                 "investigation": "READY",
                 "genai": "ERROR",
             },
-
             "error": str(exc),
         }
 
@@ -330,90 +301,57 @@ def system_status() -> dict[str, Any]:
 def predict(
     request: PredictionRequest,
 ) -> PredictionResponse:
-
     try:
-
         result = trace_x_model.predict_vector(
             request.features
         )
 
         return PredictionResponse(
             model=result["model"],
-
-            risk_score=float(
-                result["risk_score"]
-            ),
-
-            threshold=float(
-                result["threshold"]
-            ),
-
+            risk_score=float(result["risk_score"]),
+            threshold=float(result["threshold"]),
             decision=result["decision"],
         )
 
     except ValueError as exc:
-
         raise HTTPException(
             status_code=422,
             detail=str(exc),
         )
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Prediction failed: {exc}"
-            ),
-        )
+        http500("Prediction failed", exc)
 
 
 # ============================================================
 # REAL TRANSACTION PREDICTION
 # ============================================================
 
-@app.post(
-    "/api/v1/predict/transaction"
-)
+@app.post("/api/v1/predict/transaction")
 def predict_transaction(
     request: TransactionRequest,
 ) -> dict[str, Any]:
-
     try:
+        transaction = transaction_to_dict(request)
 
-        transaction = transaction_to_dict(
-            request
+        return trace_x_model.predict_transaction(
+            transaction
         )
-
-        result = (
-            trace_x_model
-            .predict_transaction(
-                transaction
-            )
-        )
-
-        return result
 
     except ValueError as exc:
-
         raise HTTPException(
             status_code=422,
             detail=str(exc),
         )
 
     except Exception as exc:
-
         print(
             "TRACE-X TRANSACTION ERROR:",
             repr(exc),
         )
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Transaction prediction failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Transaction prediction failed",
+            exc,
         )
 
 
@@ -421,23 +359,17 @@ def predict_transaction(
 # DASHBOARD SUMMARY
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/summary"
-)
+@app.get("/api/v1/dashboard/summary")
 def dashboard_summary() -> dict[str, Any]:
-
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         row = con.execute(
             """
             SELECT
-
-                COUNT(*)
-                    AS total_transactions,
+                COUNT(*) AS total_transactions,
 
                 COALESCE(
                     SUM(
@@ -448,8 +380,7 @@ def dashboard_summary() -> dict[str, Any]:
                         END
                     ),
                     0
-                )
-                    AS flagged_transactions,
+                ) AS flagged_transactions,
 
                 COALESCE(
                     SUM(
@@ -460,32 +391,22 @@ def dashboard_summary() -> dict[str, Any]:
                         END
                     ),
                     0
-                )
-                    AS normal_transactions,
+                ) AS normal_transactions,
 
                 COALESCE(
-                    SUM(
-                        "Amount Received"
-                    ),
+                    SUM("Amount Received"),
                     0
-                )
-                    AS total_received,
+                ) AS total_received,
 
                 COALESCE(
-                    SUM(
-                        "Amount Paid"
-                    ),
+                    SUM("Amount Paid"),
                     0
-                )
-                    AS total_paid,
+                ) AS total_paid,
 
                 COALESCE(
-                    AVG(
-                        "Amount Received"
-                    ),
+                    AVG("Amount Received"),
                     0
-                )
-                    AS average_transaction
+                ) AS average_transaction
 
             FROM transactions
             """
@@ -500,56 +421,37 @@ def dashboard_summary() -> dict[str, Any]:
             average,
         ) = row
 
-        total = int(
-            total or 0
-        )
-
-        flagged = int(
-            flagged or 0
-        )
-
-        normal = int(
-            normal or 0
-        )
+        total = int(total or 0)
+        flagged = int(flagged or 0)
+        normal = int(normal or 0)
 
         return {
             "total_transactions": total,
-
             "flagged_transactions": flagged,
-
             "normal_transactions": normal,
-
             "laundering_rate": (
                 flagged / total
                 if total > 0
                 else 0.0
             ),
-
             "total_received": float(
                 received or 0
             ),
-
             "total_paid": float(
                 paid or 0
             ),
-
             "average_transaction": float(
                 average or 0
             ),
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Dashboard summary failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Dashboard summary failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -558,29 +460,22 @@ def dashboard_summary() -> dict[str, Any]:
 # TRANSACTION TRENDS
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/trends"
-)
+@app.get("/api/v1/dashboard/trends")
 def dashboard_trends() -> dict[str, Any]:
-
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         rows = con.execute(
             """
             SELECT
-
                 DATE_TRUNC(
                     'hour',
                     "Timestamp"
-                )
-                    AS period,
+                ) AS period,
 
-                COUNT(*)
-                    AS transactions,
+                COUNT(*) AS transactions,
 
                 SUM(
                     CASE
@@ -588,13 +483,11 @@ def dashboard_trends() -> dict[str, Any]:
                         THEN 1
                         ELSE 0
                     END
-                )
-                    AS flagged
+                ) AS flagged
 
             FROM transactions
 
             GROUP BY 1
-
             ORDER BY 1
 
             LIMIT 500
@@ -604,35 +497,25 @@ def dashboard_trends() -> dict[str, Any]:
         return {
             "data": [
                 {
-                    "period": str(
-                        row[0]
-                    ),
-
+                    "period": str(row[0]),
                     "transactions": int(
                         row[1] or 0
                     ),
-
                     "flagged": int(
                         row[2] or 0
                     ),
                 }
-
                 for row in rows
             ]
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Dashboard trends failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Dashboard trends failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -641,35 +524,27 @@ def dashboard_trends() -> dict[str, Any]:
 # DECISION DISTRIBUTION
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/distribution"
-)
+@app.get("/api/v1/dashboard/distribution")
 def dashboard_distribution() -> dict[str, Any]:
-
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         rows = con.execute(
             """
             SELECT
-
                 CASE
                     WHEN "Is Laundering" = 1
                     THEN 'FLAG'
                     ELSE 'NORMAL'
-                END
-                    AS decision,
+                END AS decision,
 
-                COUNT(*)
-                    AS count
+                COUNT(*) AS count
 
             FROM transactions
 
             GROUP BY 1
-
             ORDER BY 1
             """
         ).fetchall()
@@ -677,31 +552,20 @@ def dashboard_distribution() -> dict[str, Any]:
         return {
             "data": [
                 {
-                    "decision": str(
-                        row[0]
-                    ),
-
-                    "count": int(
-                        row[1] or 0
-                    ),
+                    "decision": str(row[0]),
+                    "count": int(row[1] or 0),
                 }
-
                 for row in rows
             ]
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Decision distribution failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Decision distribution failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -710,26 +574,19 @@ def dashboard_distribution() -> dict[str, Any]:
 # TOP SUSPICIOUS BANKS
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/top-banks"
-)
+@app.get("/api/v1/dashboard/top-banks")
 def dashboard_top_banks() -> dict[str, Any]:
-
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         rows = con.execute(
             """
             SELECT
+                "From Bank" AS bank,
 
-                "From Bank"
-                    AS bank,
-
-                COUNT(*)
-                    AS transactions,
+                COUNT(*) AS transactions,
 
                 SUM(
                     CASE
@@ -737,16 +594,12 @@ def dashboard_top_banks() -> dict[str, Any]:
                         THEN 1
                         ELSE 0
                     END
-                )
-                    AS flagged,
+                ) AS flagged,
 
                 COALESCE(
-                    SUM(
-                        "Amount Received"
-                    ),
+                    SUM("Amount Received"),
                     0
-                )
-                    AS amount
+                ) AS amount
 
             FROM transactions
 
@@ -761,39 +614,28 @@ def dashboard_top_banks() -> dict[str, Any]:
         return {
             "data": [
                 {
-                    "bank": str(
-                        row[0]
-                    ),
-
+                    "bank": str(row[0]),
                     "transactions": int(
                         row[1] or 0
                     ),
-
                     "flagged": int(
                         row[2] or 0
                     ),
-
                     "amount": float(
                         row[3] or 0
                     ),
                 }
-
                 for row in rows
             ]
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Top banks query failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Top banks query failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -802,9 +644,7 @@ def dashboard_top_banks() -> dict[str, Any]:
 # INVESTIGATION QUEUE
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/queue"
-)
+@app.get("/api/v1/dashboard/queue")
 def dashboard_queue(
     limit: int = Query(
         default=20,
@@ -816,13 +656,11 @@ def dashboard_queue(
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         rows = con.execute(
             """
             SELECT
-
                 "Timestamp",
                 "From Bank",
                 "Account",
@@ -837,11 +675,9 @@ def dashboard_queue(
 
             FROM transactions
 
-            WHERE
-                "Is Laundering" = 1
+            WHERE "Is Laundering" = 1
 
-            ORDER BY
-                "Timestamp" DESC
+            ORDER BY "Timestamp" DESC
 
             LIMIT ?
             """,
@@ -851,49 +687,22 @@ def dashboard_queue(
         data = []
 
         for row in rows:
-
             data.append(
                 {
-                    "timestamp": str(
-                        row[0]
-                    ),
-
-                    "from_bank": str(
-                        row[1]
-                    ),
-
-                    "sender_account": str(
-                        row[2]
-                    ),
-
-                    "to_bank": str(
-                        row[3]
-                    ),
-
-                    "receiver_account": str(
-                        row[4]
-                    ),
-
+                    "timestamp": str(row[0]),
+                    "from_bank": str(row[1]),
+                    "sender_account": str(row[2]),
+                    "to_bank": str(row[3]),
+                    "receiver_account": str(row[4]),
                     "amount_received": float(
                         row[5] or 0
                     ),
-
-                    "receiving_currency": str(
-                        row[6]
-                    ),
-
+                    "receiving_currency": str(row[6]),
                     "amount_paid": float(
                         row[7] or 0
                     ),
-
-                    "payment_currency": str(
-                        row[8]
-                    ),
-
-                    "payment_format": str(
-                        row[9]
-                    ),
-
+                    "payment_currency": str(row[8]),
+                    "payment_format": str(row[9]),
                     "is_laundering": int(
                         row[10] or 0
                     ),
@@ -906,17 +715,12 @@ def dashboard_queue(
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Investigation queue failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Investigation queue failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -925,12 +729,9 @@ def dashboard_queue(
 # NETWORK INTELLIGENCE
 # ============================================================
 
-@app.get(
-    "/api/v1/dashboard/network"
-)
+@app.get("/api/v1/dashboard/network")
 def dashboard_network(
     bank: str | None = None,
-
     limit: int = Query(
         default=40,
         ge=1,
@@ -941,30 +742,23 @@ def dashboard_network(
     con = None
 
     try:
-
         con = get_analytics_connection()
 
         if bank:
-
             rows = con.execute(
                 """
                 SELECT
-
                     "From Bank",
                     "Account",
                     "To Bank",
                     "Account_1",
 
-                    COUNT(*)
-                        AS tx_count,
+                    COUNT(*) AS tx_count,
 
                     COALESCE(
-                        SUM(
-                            "Amount Received"
-                        ),
+                        SUM("Amount Received"),
                         0
-                    )
-                        AS total_amount
+                    ) AS total_amount
 
                 FROM transactions
 
@@ -988,26 +782,20 @@ def dashboard_network(
             ).fetchall()
 
         else:
-
             rows = con.execute(
                 """
                 SELECT
-
                     "From Bank",
                     "Account",
                     "To Bank",
                     "Account_1",
 
-                    COUNT(*)
-                        AS tx_count,
+                    COUNT(*) AS tx_count,
 
                     COALESCE(
-                        SUM(
-                            "Amount Received"
-                        ),
+                        SUM("Amount Received"),
                         0
-                    )
-                        AS total_amount
+                    ) AS total_amount
 
                 FROM transactions
 
@@ -1022,52 +810,28 @@ def dashboard_network(
                 [limit],
             ).fetchall()
 
-        nodes = {}
-        edges = []
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, Any]] = []
 
         for row in rows:
 
-            from_bank = str(
-                row[0]
-            )
+            from_bank = str(row[0])
+            sender = str(row[1])
+            to_bank = str(row[2])
+            receiver = str(row[3])
 
-            sender = str(
-                row[1]
-            )
-
-            to_bank = str(
-                row[2]
-            )
-
-            receiver = str(
-                row[3]
-            )
-
-            sender_id = (
-                f"bank:{from_bank}"
-            )
-
-            receiver_id = (
-                f"bank:{to_bank}"
-            )
+            sender_id = f"bank:{from_bank}"
+            receiver_id = f"bank:{to_bank}"
 
             nodes[sender_id] = {
                 "id": sender_id,
-
-                "label": (
-                    f"Bank {from_bank}"
-                ),
-
+                "label": f"Bank {from_bank}",
                 "type": "bank",
             }
 
             nodes[receiver_id] = {
                 "id": receiver_id,
-
-                "label": (
-                    f"Bank {to_bank}"
-                ),
-
+                "label": f"Bank {to_bank}",
                 "type": "bank",
             }
 
@@ -1079,19 +843,13 @@ def dashboard_network(
                         f":{sender}"
                         f":{receiver}"
                     ),
-
                     "source": sender_id,
-
                     "target": receiver_id,
-
                     "sender_account": sender,
-
                     "receiver_account": receiver,
-
                     "transactions": int(
                         row[4] or 0
                     ),
-
                     "amount": float(
                         row[5] or 0
                     ),
@@ -1099,25 +857,17 @@ def dashboard_network(
             )
 
         return {
-            "nodes": list(
-                nodes.values()
-            ),
-
+            "nodes": list(nodes.values()),
             "edges": edges,
         }
 
     except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Network intelligence failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Network intelligence failed",
+            exc,
         )
 
     finally:
-
         if con is not None:
             con.close()
 
@@ -1126,68 +876,52 @@ def dashboard_network(
 # INVESTIGATION WORKFLOW
 # ============================================================
 
-@app.post(
-    "/api/v1/investigate"
-)
+@app.post("/api/v1/investigate")
 def investigate(
     request: TransactionRequest,
 ) -> dict[str, Any]:
 
     try:
-
-        transaction = (
-            transaction_to_dict(
-                request
-            )
-        )
+        transaction = transaction_to_dict(request)
 
         historical = (
             trace_x_model
             .historical_engine
-            .get_history(
-                transaction
-            )
+            .get_history(transaction)
         )
 
         prediction = (
             trace_x_model
-            .predict_transaction(
-                transaction
-            )
+            .predict_transaction(transaction)
         )
 
         risk_score = float(
             prediction.get(
                 "risk_score",
-                0.0
+                0.0,
             )
         )
 
         threshold = float(
             prediction.get(
                 "threshold",
-                0.76
+                0.76,
             )
         )
 
         return {
             "transaction": transaction,
-
             "model": prediction,
-
             "historical_features": historical,
-
             "investigation": {
                 "risk_level": (
                     "HIGH"
                     if risk_score >= threshold
                     else "NORMAL"
                 ),
-
                 "model_triggered": (
                     risk_score >= threshold
                 ),
-
                 "next_step": (
                     "REVIEW"
                     if risk_score >= threshold
@@ -1197,25 +931,19 @@ def investigate(
         }
 
     except ValueError as exc:
-
         raise HTTPException(
             status_code=422,
             detail=str(exc),
         )
 
     except Exception as exc:
-
         print(
             "TRACE-X INVESTIGATION ERROR:",
             repr(exc),
         )
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Investigation failed: "
-                f"{exc}"
-            ),
+        http500(
+            "Investigation failed",
+            exc,
         )
 
 
@@ -1223,49 +951,30 @@ def investigate(
 # GEMINI AI INVESTIGATION
 # ============================================================
 
-@app.post(
-    "/api/v1/ai/investigate"
-)
+@app.post("/api/v1/ai/investigate")
 def ai_investigate(
     request: TransactionRequest,
 ) -> dict[str, Any]:
 
     try:
 
-        # ----------------------------------------------------
-        # Import lazily.
-        #
-        # This protects the normal TRACE-X workflow if
-        # Gemini is not configured or unavailable.
-        # ----------------------------------------------------
-
+        # Lazy import so normal TRACE-X inference
+        # still works when Gemini is unavailable.
         from backend.ai_service import (
             get_ai_investigation_service,
         )
 
-        transaction = (
-            transaction_to_dict(
-                request
-            )
-        )
-
-        # ----------------------------------------------------
-        # TRACE-X remains the authoritative decision engine
-        # ----------------------------------------------------
+        transaction = transaction_to_dict(request)
 
         historical = (
             trace_x_model
             .historical_engine
-            .get_history(
-                transaction
-            )
+            .get_history(transaction)
         )
 
         prediction = (
             trace_x_model
-            .predict_transaction(
-                transaction
-            )
+            .predict_transaction(transaction)
         )
 
         evidence_pack = {
@@ -1274,88 +983,65 @@ def ai_investigate(
             "model": {
                 "name": prediction.get(
                     "model",
-                    "TRACE-X V1"
+                    "TRACE-X V1",
                 ),
-
                 "risk_score": float(
                     prediction.get(
                         "risk_score",
-                        0.0
+                        0.0,
                     )
                 ),
-
                 "threshold": float(
                     prediction.get(
                         "threshold",
-                        0.76
+                        0.76,
                     )
                 ),
-
                 "decision": prediction.get(
                     "decision",
-                    "UNKNOWN"
+                    "UNKNOWN",
                 ),
-
                 "feature_count": 38,
             },
 
             "historical": historical,
 
-            # Reserved for future grounded evidence.
+            # Reserved for grounded network evidence.
             "network": {},
 
-            # Reserved for future grounded rules.
+            # Reserved for grounded rules.
             "rules": {},
         }
-
-        # ----------------------------------------------------
-        # Gemini explanation
-        # ----------------------------------------------------
 
         ai_service = (
             get_ai_investigation_service()
         )
 
-        ai_result = (
-            ai_service.investigate(
-                evidence_pack
-            )
+        ai_result = ai_service.investigate(
+            evidence_pack
         )
 
         return {
             "status": "success",
-
-            "trace_x": (
-                evidence_pack["model"]
-            ),
-
-            "historical_features": (
-                historical
-            ),
-
+            "trace_x": evidence_pack["model"],
+            "historical_features": historical,
             "ai": ai_result,
         }
 
     except ValueError as exc:
-
         raise HTTPException(
             status_code=422,
             detail=str(exc),
         )
 
     except Exception as exc:
-
         print(
             "TRACE-X GENAI ERROR:",
             repr(exc),
         )
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "AI investigation failed: "
-                f"{exc}"
-            ),
+        http500(
+            "AI investigation failed",
+            exc,
         )
 
 
@@ -1364,15 +1050,19 @@ def ai_investigate(
 # ============================================================
 
 if __name__ == "__main__":
-
     import uvicorn
 
     uvicorn.run(
         "backend.main:app",
-
-        host="127.0.0.1",
-
-        port=8001,
-
+        host=os.getenv(
+            "HOST",
+            "127.0.0.1",
+        ),
+        port=int(
+            os.getenv(
+                "PORT",
+                "8001",
+            )
+        ),
         reload=False,
     )

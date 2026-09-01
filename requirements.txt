@@ -4,7 +4,8 @@ pydantic
 pandas
 numpy
 scikit-learn
-xgboost
+xgboost-cpu
 networkx
 pyarrow
 duckdb
+python-dotenv

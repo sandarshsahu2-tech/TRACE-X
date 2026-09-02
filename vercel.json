@@ -1,29 +1,36 @@
+@'
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "builds": [
+  "buildCommand": "cd frontend && npm ci && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "cd frontend && npm ci",
+  "rewrites": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python"
+      "source": "/health",
+      "destination": "/api/index.py"
     },
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/$1"
+  "functions": {
+    "api/index.py": {
+      "memory": 2048,
+      "maxDuration": 60,
+      "includeFiles": [
+        "backend/**",
+        "models/TRACE_X_FINAL_MODEL/TRACE_X_XGBOOST_GPU.json",
+        "models/TRACE_X_FINAL_MODEL/TRACE_X_MODEL_FEATURES.json",
+        "models/TRACE_X_FINAL_MODEL/TRACE_X_FINAL_MODEL_AUDIT.json",
+        "models/TRACE_X_FINAL_MODEL/frequency_lookup.parquet"
+      ]
     }
-  ]
+  }
 }
+'@ | Set-Content -Encoding utf8 vercel.json

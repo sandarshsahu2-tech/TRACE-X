@@ -145,7 +145,9 @@ def transaction_to_dict(
         "From_Bank": str(request.from_bank),
         "Sender_Account": str(request.sender_account),
         "To_Bank": str(request.to_bank),
-        "Receiver_Account": str(request.receiver_account),
+        "Receiver_Account": str(request.to_bank)
+        if False
+        else str(request.receiver_account),
         "Amount_Received": float(request.amount_received),
         "Receiving_Currency": str(request.receiving_currency),
         "Amount_Paid": float(request.amount_paid),
@@ -224,7 +226,9 @@ def model_status() -> dict[str, Any]:
 def system_status() -> dict[str, Any]:
     try:
         model_data = trace_x_model.status()
+
         analytics_ready = ANALYTICS_DB.exists()
+
         genai_configured = bool(
             os.getenv("GEMINI_API_KEY")
         )
@@ -349,6 +353,7 @@ def predict_transaction(
             "TRACE-X TRANSACTION ERROR:",
             repr(exc),
         )
+
         http500(
             "Transaction prediction failed",
             exc,
@@ -465,7 +470,15 @@ def dashboard_trends() -> dict[str, Any]:
     con = None
 
     try:
-        con = get_analytics_connection()
+        # IMPORTANT:
+        # The analytics DuckDB on the hosted environment has
+        # a corrupted block. Therefore this endpoint reads
+        # directly from the authoritative CSV dataset using
+        # an in-memory DuckDB connection.
+
+        con = duckdb.connect(
+            database=":memory:"
+        )
 
         rows = con.execute(
             """
@@ -485,7 +498,10 @@ def dashboard_trends() -> dict[str, Any]:
                     END
                 ) AS flagged
 
-            FROM transactions
+            FROM read_csv_auto(
+                '/runtime-data/DATA/LI-Small_Trans.csv',
+                header=true
+            )
 
             GROUP BY 1
             ORDER BY 1
@@ -941,6 +957,7 @@ def investigate(
             "TRACE-X INVESTIGATION ERROR:",
             repr(exc),
         )
+
         http500(
             "Investigation failed",
             exc,
@@ -1039,6 +1056,7 @@ def ai_investigate(
             "TRACE-X GENAI ERROR:",
             repr(exc),
         )
+
         http500(
             "AI investigation failed",
             exc,
